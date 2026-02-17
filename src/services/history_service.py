@@ -164,7 +164,8 @@ class HistoryService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         page: int = 1,
-        limit: int = 20
+        limit: int = 20,
+        distinct_code: bool = False,
     ) -> Dict[str, Any]:
         """
         Get history analysis list.
@@ -176,6 +177,7 @@ class HistoryService:
             end_date: End date (YYYY-MM-DD)
             page: Page number
             limit: Items per page
+            distinct_code: Whether to return only the latest record per stock code
             
         Returns:
             Dictionary containing total count and items
@@ -210,7 +212,8 @@ class HistoryService:
                 start_date=start_dt,
                 end_date=end_dt,
                 offset=offset,
-                limit=limit
+                limit=limit,
+                distinct_code=distinct_code,
             )
             
             # Convert to response format

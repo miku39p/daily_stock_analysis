@@ -152,7 +152,8 @@ def get_history_list(
     end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
     page: int = Query(1, ge=1, description="页码（从 1 开始）"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    distinct_code: bool = Query(True, description="每个股票只显示最新一条记录"),
+    db_manager: DatabaseManager = Depends(get_database_manager),
 ) -> HistoryListResponse:
     """
     获取历史分析列表
@@ -166,6 +167,7 @@ def get_history_list(
         end_date: 结束日期
         page: 页码
         limit: 每页数量
+        distinct_code: 每个股票只显示最新一条记录
         db_manager: 数据库管理器依赖
         
     Returns:
@@ -181,7 +183,8 @@ def get_history_list(
             start_date=start_date,
             end_date=end_date,
             page=page,
-            limit=limit
+            limit=limit,
+            distinct_code=distinct_code,
         )
         
         # 转换为响应模型

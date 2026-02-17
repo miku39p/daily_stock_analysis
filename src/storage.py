@@ -2311,7 +2311,8 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         offset: int = 0,
-        limit: int = 20
+        limit: int = 20,
+        distinct_code: bool = False,
     ) -> Tuple[List[AnalysisHistory], int]:
         """
         分页查询分析历史记录（带总数）
@@ -2323,6 +2324,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             end_date: 结束日期（含）
             offset: 偏移量（跳过前 N 条）
             limit: 每页数量
+            distinct_code: 是否每个股票只返回最新一条记录
             
         Returns:
             Tuple[List[AnalysisHistory], int]: (记录列表, 总数)
@@ -2350,21 +2352,51 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             
             # 构建 where 子句
             where_clause = and_(*conditions) if conditions else True
-            
-            # 查询总数
-            total_query = select(func.count(AnalysisHistory.id)).where(where_clause)
-            total = session.execute(total_query).scalar() or 0
-            
-            # 查询分页数据
-            data_query = (
-                select(AnalysisHistory)
-                .where(where_clause)
-                .order_by(desc(AnalysisHistory.created_at))
-                .offset(offset)
-                .limit(limit)
-            )
+
+            if distinct_code:
+                # Latest row per code by created_at (SQLite-friendly)
+                latest_by_code = (
+                    select(
+                        AnalysisHistory.code,
+                        func.max(AnalysisHistory.created_at).label("max_created_at"),
+                    )
+                    .where(where_clause)
+                    .group_by(AnalysisHistory.code)
+                    .subquery()
+                )
+
+                total_query = select(func.count(func.distinct(AnalysisHistory.code))).where(where_clause)
+                total = session.execute(total_query).scalar() or 0
+
+                data_query = (
+                    select(AnalysisHistory)
+                    .join(
+                        latest_by_code,
+                        and_(
+                            AnalysisHistory.code == latest_by_code.c.code,
+                            AnalysisHistory.created_at == latest_by_code.c.max_created_at,
+                        ),
+                    )
+                    .order_by(desc(AnalysisHistory.created_at))
+                    .offset(offset)
+                    .limit(limit)
+                )
+            else:
+                # 查询总数
+                total_query = select(func.count(AnalysisHistory.id)).where(where_clause)
+                total = session.execute(total_query).scalar() or 0
+
+                # 查询分页数据
+                data_query = (
+                    select(AnalysisHistory)
+                    .where(where_clause)
+                    .order_by(desc(AnalysisHistory.created_at))
+                    .offset(offset)
+                    .limit(limit)
+                )
+
             results = session.execute(data_query).scalars().all()
-            
+
             return list(results), total
     
     def get_analysis_history_by_id(self, record_id: int) -> Optional[AnalysisHistory]:
