@@ -26,3 +26,8 @@ skip = [".git", "__pycache__", ".env", "venv", ".venv"]
 [tool.bandit]
 exclude_dirs = ["tests", "test_*.py"]
 skips = ["B101"]  # assert 语句在测试中是允许的
+
+[dependency-groups]
+dev = [
+    "akshare>=1.18.25",
+]

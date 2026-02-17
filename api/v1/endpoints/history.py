@@ -43,7 +43,7 @@ router = APIRouter()
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取历史分析列表",
-    description="分页获取历史分析记录摘要，支持按股票代码和日期范围筛选"
+    description="分页获取历史分析记录摘要，支持按股票代码和日期范围筛选",
 )
 def get_history_list(
     stock_code: Optional[str] = Query(None, description="股票代码筛选"),
@@ -51,36 +51,39 @@ def get_history_list(
     end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
     page: int = Query(1, ge=1, description="页码（从 1 开始）"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    distinct_code: bool = Query(True, description="每个股票只显示最新一条记录"),
+    db_manager: DatabaseManager = Depends(get_database_manager),
 ) -> HistoryListResponse:
     """
     获取历史分析列表
-    
+
     分页获取历史分析记录摘要，支持按股票代码和日期范围筛选
-    
+
     Args:
         stock_code: 股票代码筛选
         start_date: 开始日期
         end_date: 结束日期
         page: 页码
         limit: 每页数量
+        distinct_code: 每个股票只显示最新一条记录
         db_manager: 数据库管理器依赖
-        
+
     Returns:
         HistoryListResponse: 历史记录列表
     """
     try:
         service = HistoryService(db_manager)
-        
+
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_list(
             stock_code=stock_code,
             start_date=start_date,
             end_date=end_date,
             page=page,
-            limit=limit
+            limit=limit,
+            distinct_code=distinct_code,
         )
-        
+
         # 转换为响应模型
         items = [
             HistoryItem(
@@ -90,26 +93,23 @@ def get_history_list(
                 report_type=item.get("report_type"),
                 sentiment_score=item.get("sentiment_score"),
                 operation_advice=item.get("operation_advice"),
-                created_at=item.get("created_at")
+                created_at=item.get("created_at"),
             )
             for item in result.get("items", [])
         ]
-        
+
         return HistoryListResponse(
-            total=result.get("total", 0),
-            page=page,
-            limit=limit,
-            items=items
+            total=result.get("total", 0), page=page, limit=limit, items=items
         )
-        
+
     except Exception as e:
         logger.error(f"查询历史列表失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"查询历史列表失败: {str(e)}"
-            }
+                "message": f"查询历史列表失败: {str(e)}",
+            },
         )
 
 
@@ -122,42 +122,41 @@ def get_history_list(
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取历史报告详情",
-    description="根据 query_id 获取完整的历史分析报告"
+    description="根据 query_id 获取完整的历史分析报告",
 )
 def get_history_detail(
-    query_id: str,
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    query_id: str, db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> AnalysisReport:
     """
     获取历史报告详情
-    
+
     根据 query_id 获取完整的历史分析报告
-    
+
     Args:
         query_id: 分析记录唯一标识
         db_manager: 数据库管理器依赖
-        
+
     Returns:
         AnalysisReport: 完整分析报告
-        
+
     Raises:
         HTTPException: 404 - 报告不存在
     """
     try:
         service = HistoryService(db_manager)
-        
+
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_detail(query_id)
-        
+
         if result is None:
             raise HTTPException(
                 status_code=404,
                 detail={
                     "error": "not_found",
-                    "message": f"未找到 query_id={query_id} 的分析记录"
-                }
+                    "message": f"未找到 query_id={query_id} 的分析记录",
+                },
             )
-        
+
         # 从 context_snapshot 中提取价格信息
         current_price = None
         change_pct = None
@@ -168,13 +167,17 @@ def get_history_detail(
             realtime = enhanced_context.get("realtime") or {}
             current_price = realtime.get("price")
             change_pct = realtime.get("change_pct") or realtime.get("change_60d")
-            
+
             # 也尝试从 realtime_quote_raw 获取
             if current_price is None:
                 realtime_quote_raw = context_snapshot.get("realtime_quote_raw") or {}
                 current_price = realtime_quote_raw.get("price")
-                change_pct = change_pct or realtime_quote_raw.get("change_pct") or realtime_quote_raw.get("pct_chg")
-        
+                change_pct = (
+                    change_pct
+                    or realtime_quote_raw.get("change_pct")
+                    or realtime_quote_raw.get("pct_chg")
+                )
+
         # 构建响应模型
         meta = ReportMeta(
             query_id=result.get("query_id", query_id),
@@ -183,37 +186,34 @@ def get_history_detail(
             report_type=result.get("report_type"),
             created_at=result.get("created_at"),
             current_price=current_price,
-            change_pct=change_pct
+            change_pct=change_pct,
         )
-        
+
         summary = ReportSummary(
             analysis_summary=result.get("analysis_summary"),
             operation_advice=result.get("operation_advice"),
             trend_prediction=result.get("trend_prediction"),
             sentiment_score=result.get("sentiment_score"),
-            sentiment_label=result.get("sentiment_label")
+            sentiment_label=result.get("sentiment_label"),
         )
-        
+
         strategy = ReportStrategy(
             ideal_buy=result.get("ideal_buy"),
             secondary_buy=result.get("secondary_buy"),
             stop_loss=result.get("stop_loss"),
-            take_profit=result.get("take_profit")
+            take_profit=result.get("take_profit"),
         )
-        
+
         details = ReportDetails(
             news_content=result.get("news_content"),
             raw_result=result.get("raw_result"),
-            context_snapshot=result.get("context_snapshot")
+            context_snapshot=result.get("context_snapshot"),
         )
-        
+
         return AnalysisReport(
-            meta=meta,
-            summary=summary,
-            strategy=strategy,
-            details=details
+            meta=meta, summary=summary, strategy=strategy, details=details
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -222,8 +222,8 @@ def get_history_detail(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"查询历史详情失败: {str(e)}"
-            }
+                "message": f"查询历史详情失败: {str(e)}",
+            },
         )
 
 
@@ -235,12 +235,12 @@ def get_history_detail(
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取历史报告关联新闻",
-    description="根据 query_id 获取关联的新闻情报列表（为空也返回 200）"
+    description="根据 query_id 获取关联的新闻情报列表（为空也返回 200）",
 )
 def get_history_news(
     query_id: str,
     limit: int = Query(20, ge=1, le=100, description="返回数量限制"),
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    db_manager: DatabaseManager = Depends(get_database_manager),
 ) -> NewsIntelResponse:
     """
     获取历史报告关联新闻
@@ -261,15 +261,12 @@ def get_history_news(
             NewsIntelItem(
                 title=item.get("title", ""),
                 snippet=item.get("snippet"),
-                url=item.get("url", "")
+                url=item.get("url", ""),
             )
             for item in items
         ]
 
-        return NewsIntelResponse(
-            total=len(response_items),
-            items=response_items
-        )
+        return NewsIntelResponse(total=len(response_items), items=response_items)
 
     except Exception as e:
         logger.error(f"查询新闻情报失败: {e}", exc_info=True)
@@ -277,6 +274,6 @@ def get_history_news(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"查询新闻情报失败: {str(e)}"
-            }
+                "message": f"查询新闻情报失败: {str(e)}",
+            },
         )
