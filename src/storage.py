@@ -856,8 +856,7 @@ class DatabaseManager:
         Returns:
             Tuple[List[AnalysisHistory], int]: (记录列表, 总数)
         """
-        from sqlalchemy import func, row_number
-        from sqlalchemy.dialects.postgresql import over
+        from sqlalchemy import func
 
         with self.get_session() as session:
             conditions = []
@@ -880,17 +879,13 @@ class DatabaseManager:
             where_clause = and_(*conditions) if conditions else True
 
             if distinct_code:
-                subquery = (
+                subquery_ids = (
                     select(
-                        AnalysisHistory.id,
-                        row_number()
-                        .over(
-                            partition_by=AnalysisHistory.code,
-                            order_by=desc(AnalysisHistory.created_at),
-                        )
-                        .label("rn"),
+                        AnalysisHistory.code,
+                        func.max(AnalysisHistory.created_at).label("max_created_at"),
                     )
                     .where(where_clause)
+                    .group_by(AnalysisHistory.code)
                     .subquery()
                 )
 
@@ -901,8 +896,13 @@ class DatabaseManager:
 
                 data_query = (
                     select(AnalysisHistory)
-                    .join(subquery, AnalysisHistory.id == subquery.c.id)
-                    .where(subquery.c.rn == 1)
+                    .join(
+                        subquery_ids,
+                        and_(
+                            AnalysisHistory.code == subquery_ids.c.code,
+                            AnalysisHistory.created_at == subquery_ids.c.max_created_at,
+                        ),
+                    )
                     .order_by(desc(AnalysisHistory.created_at))
                     .offset(offset)
                     .limit(limit)
