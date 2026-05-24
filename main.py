@@ -565,6 +565,13 @@ def main() -> int:
             from src.scheduler import run_with_schedule
 
             def scheduled_task():
+                # Refresh stock list dynamically to support hot-reloading of .env
+                config.refresh_stock_list()
+
+                # Skip execution if STOCK_LIST is empty or unconfigured, and no command-line stocks are specified
+                if not os.getenv("STOCK_LIST", "").strip() and not stock_codes:
+                    logger.info("自选股环境变量 (STOCK_LIST) 为空，且未通过命令行指定股票，跳过本次定时分析 (不需要每天运行)")
+                    return
                 run_full_analysis(config, args, stock_codes)
 
             run_with_schedule(
@@ -575,6 +582,11 @@ def main() -> int:
             return 0
 
         # 模式3: 正常单次运行
+        # Check if STOCK_LIST is empty/unconfigured, and no stocks are specified, and not in market-review only mode
+        if not os.getenv("STOCK_LIST", "").strip() and not stock_codes and not args.market_review:
+            logger.info("自选股环境变量 (STOCK_LIST) 为空，且未指定仅大盘分析模式，跳过单次分析运行 (不需要每天运行)")
+            return 0
+
         run_full_analysis(config, args, stock_codes)
 
         logger.info("\n程序执行完成")
