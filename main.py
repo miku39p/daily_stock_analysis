@@ -1470,6 +1470,14 @@ def main() -> int:
 
             def scheduled_task():
                 runtime_config = _reload_runtime_config()
+
+                # Skip when STOCK_LIST is empty/unconfigured and no CLI stocks were provided.
+                if not os.getenv("STOCK_LIST", "").strip() and not stock_codes:
+                    logger.info(
+                        "自选股环境变量 (STOCK_LIST) 为空，且未通过命令行指定股票，跳过本次定时分析"
+                    )
+                    return
+
                 run_full_analysis(runtime_config, args, scheduled_stock_codes)
 
             background_tasks = []
@@ -1506,6 +1514,17 @@ def main() -> int:
             return 0
 
         # 模式3: 正常单次运行
+        # Skip when STOCK_LIST is empty/unconfigured, no CLI stocks, and not market-review-only.
+        if (
+            not os.getenv("STOCK_LIST", "").strip()
+            and not stock_codes
+            and not args.market_review
+        ):
+            logger.info(
+                "自选股环境变量 (STOCK_LIST) 为空，且未指定仅大盘分析模式，跳过单次分析运行"
+            )
+            return 0
+
         if config.run_immediately:
             _run_analysis_with_runtime_scheduler_lock(config, args, stock_codes)
         else:
