@@ -94,9 +94,9 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_sensitive": False,
         "is_required": False,
         "is_editable": True,
-        "default_value": "600519,300750,002594",
+        "default_value": "",
         "options": [],
-        "validation": {"min_items": 1},
+        "validation": {"min_items": 0},
         "display_order": 10,
         "help_key": "settings.base.STOCK_LIST",
         "examples": [

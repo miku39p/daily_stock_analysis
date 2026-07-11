@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Unit tests for main.py skip behavior when STOCK_LIST is empty or unconfigured."""
+"""Tests for empty STOCK_LIST behavior: skip stocks, keep market review."""
 
 import os
 import tempfile
@@ -20,8 +20,11 @@ class _DummyConfig(SimpleNamespace):
     def validate(self):
         return []
 
+    def refresh_stock_list(self):
+        self.stock_list = list(getattr(self, "stock_list", []) or [])
 
-class TestMainSkipLogic(unittest.TestCase):
+
+class TestEmptyStockListMarketOnly(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.env_path = Path(self.temp_dir.name) / ".env"
@@ -59,7 +62,7 @@ class TestMainSkipLogic(unittest.TestCase):
             "no_notify": False,
             "no_market_review": False,
             "dry_run": False,
-            "force_run": False,
+            "force_run": True,
             "single_notify": False,
             "no_context_snapshot": False,
             "workers": None,
@@ -76,77 +79,51 @@ class TestMainSkipLogic(unittest.TestCase):
             "schedule_run_immediately": True,
             "run_immediately": True,
             "stock_list": [],
+            "market_review_enabled": True,
+            "market_review_region": "cn",
+            "trading_day_check_enabled": False,
+            "single_stock_notify": False,
+            "merge_email_notification": False,
+            "daily_market_context_enabled": False,
+            "analysis_delay": 0,
         }
         defaults.update(overrides)
         return _DummyConfig(**defaults)
 
-    def _run_main(self, args, config, stock_list_env: str):
-        os.environ["STOCK_LIST"] = stock_list_env
-        with patch("main.parse_arguments", return_value=args), patch(
-            "main.get_config", return_value=config
-        ), patch("main._setup_bootstrap_logging"), patch(
-            "main._setup_runtime_logging"
-        ), patch(
-            "main._run_analysis_with_runtime_scheduler_lock"
-        ) as mock_run_lock, patch(
-            "main.run_full_analysis"
-        ) as mock_run_full:
-            exit_code = main.main()
-        return exit_code, mock_run_lock, mock_run_full
-
-    def test_main_skip_when_stock_list_empty(self):
+    def test_run_full_analysis_skips_stocks_when_watchlist_empty(self):
         args = self._make_args()
-        config = self._make_config()
-        exit_code, mock_run_lock, mock_run_full = self._run_main(args, config, "")
-        self.assertEqual(exit_code, 0)
-        mock_run_lock.assert_not_called()
-        mock_run_full.assert_not_called()
+        config = self._make_config(stock_list=[])
+        pipeline = MagicMock()
+        pipeline.run.return_value = [{"code": "SHOULD_NOT_RUN"}]
 
-    def test_main_skip_when_stock_list_whitespace(self):
-        args = self._make_args()
-        config = self._make_config()
-        exit_code, mock_run_lock, mock_run_full = self._run_main(args, config, "   ")
-        self.assertEqual(exit_code, 0)
-        mock_run_lock.assert_not_called()
-        mock_run_full.assert_not_called()
-
-    def test_main_no_skip_when_stock_list_configured(self):
-        args = self._make_args()
-        config = self._make_config(stock_list=["600519"])
-        exit_code, mock_run_lock, mock_run_full = self._run_main(args, config, "600519")
-        self.assertEqual(exit_code, 0)
-        mock_run_lock.assert_called_once()
-        mock_run_full.assert_not_called()
-
-    def test_main_no_skip_when_cli_stocks_provided(self):
-        args = self._make_args(stocks="000001")
-        config = self._make_config()
-        exit_code, mock_run_lock, mock_run_full = self._run_main(args, config, "")
-        self.assertEqual(exit_code, 0)
-        mock_run_lock.assert_called_once()
-        mock_run_full.assert_not_called()
-
-    def test_main_no_skip_when_market_review_only(self):
-        """--market-review takes a dedicated path before the empty STOCK_LIST skip."""
-        args = self._make_args(market_review=True)
-        config = self._make_config(trading_day_check_enabled=False, market_review_region="cn")
-        os.environ["STOCK_LIST"] = ""
-        with patch("main.parse_arguments", return_value=args), patch(
-            "main.get_config", return_value=config
-        ), patch("main._setup_bootstrap_logging"), patch(
-            "main._setup_runtime_logging"
+        with patch("main._refresh_stock_index_cache_for_analysis"), patch(
+            "src.core.market_review.run_market_review", return_value="ok"
+        ) as mock_review, patch(
+            "src.core.pipeline.StockAnalysisPipeline", return_value=pipeline
         ), patch(
-            "main._run_analysis_with_runtime_scheduler_lock"
-        ) as mock_run_lock, patch(
-            "src.core.market_review_runtime.build_market_review_runtime",
-            return_value=(MagicMock(), MagicMock(), MagicMock()),
-        ), patch(
-            "main._run_market_review_with_shared_lock"
-        ) as mock_review:
-            exit_code = main.main()
-        self.assertEqual(exit_code, 0)
-        mock_run_lock.assert_not_called()
+            "main._run_market_review_with_shared_lock",
+            side_effect=lambda config, fn, **kwargs: fn(**kwargs),
+        ):
+            ok = main.run_full_analysis(config, args, stock_codes=[])
+
+        self.assertTrue(ok)
+        pipeline.run.assert_not_called()
         mock_review.assert_called_once()
+
+    def test_run_full_analysis_runs_stocks_when_watchlist_present(self):
+        args = self._make_args(no_market_review=True)
+        config = self._make_config(stock_list=["300750"], market_review_enabled=False)
+        pipeline = MagicMock()
+        pipeline.run.return_value = [{"code": "300750"}]
+
+        with patch("main._refresh_stock_index_cache_for_analysis"), patch(
+            "src.core.pipeline.StockAnalysisPipeline", return_value=pipeline
+        ):
+            ok = main.run_full_analysis(config, args, stock_codes=["300750"])
+
+        self.assertTrue(ok)
+        pipeline.run.assert_called_once()
+        self.assertEqual(pipeline.run.call_args.kwargs.get("stock_codes"), ["300750"])
 
 
 if __name__ == "__main__":

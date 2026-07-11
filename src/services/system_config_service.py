@@ -3683,9 +3683,8 @@ class SystemConfigService:
             "自选股",
             "base",
             True,
-            "needs_action",
-            "当前 STOCK_LIST 为空。",
-            "请至少添加 1 只股票用于首次试跑。",
+            "configured",
+            "当前 STOCK_LIST 为空：将跳过个股分析，仅执行大盘复盘（如已启用）。",
         )
 
     def _build_setup_notification_check(self, effective_map: Dict[str, str]) -> Dict[str, Any]:

@@ -695,6 +695,11 @@ def run_full_analysis(
             logger.info("今日休市股票已跳过: %s", skipped)
         stock_codes = filtered_codes
 
+        if not stock_codes:
+            logger.info(
+                "自选股列表为空，跳过个股分析与个股推送，仅执行大盘复盘（如已启用）"
+            )
+
         # 命令行参数 --single-notify 覆盖配置（#55）
         if getattr(args, 'single_notify', False):
             config.single_stock_notify = True
@@ -772,14 +777,17 @@ def run_full_analysis(
                 require_current_query_match=True,
             )
 
-        # 1. 运行个股分析
-        results = pipeline.run(
-            stock_codes=stock_codes,
-            dry_run=args.dry_run,
-            send_notification=not args.no_notify,
-            merge_notification=merge_notification,
-            current_time=analysis_reference_time,
-        )
+        # 1. 运行个股分析（自选股为空时跳过，仅保留大盘复盘）
+        if stock_codes:
+            results = pipeline.run(
+                stock_codes=stock_codes,
+                dry_run=args.dry_run,
+                send_notification=not args.no_notify,
+                merge_notification=merge_notification,
+                current_time=analysis_reference_time,
+            )
+        else:
+            results = []
 
         if should_use_daily_market_context and not market_context_summary:
             (
@@ -1470,14 +1478,6 @@ def main() -> int:
 
             def scheduled_task():
                 runtime_config = _reload_runtime_config()
-
-                # Skip when STOCK_LIST is empty/unconfigured and no CLI stocks were provided.
-                if not os.getenv("STOCK_LIST", "").strip() and not stock_codes:
-                    logger.info(
-                        "自选股环境变量 (STOCK_LIST) 为空，且未通过命令行指定股票，跳过本次定时分析"
-                    )
-                    return
-
                 run_full_analysis(runtime_config, args, scheduled_stock_codes)
 
             background_tasks = []
@@ -1514,17 +1514,6 @@ def main() -> int:
             return 0
 
         # 模式3: 正常单次运行
-        # Skip when STOCK_LIST is empty/unconfigured, no CLI stocks, and not market-review-only.
-        if (
-            not os.getenv("STOCK_LIST", "").strip()
-            and not stock_codes
-            and not args.market_review
-        ):
-            logger.info(
-                "自选股环境变量 (STOCK_LIST) 为空，且未指定仅大盘分析模式，跳过单次分析运行"
-            )
-            return 0
-
         if config.run_immediately:
             _run_analysis_with_runtime_scheduler_lock(config, args, stock_codes)
         else:
