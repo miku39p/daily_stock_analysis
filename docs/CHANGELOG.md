@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [新功能] 新增 `Docker Publish Main` 工作流：推送 `main`（或手动触发）时自动构建 linux/amd64 镜像并推送到 Docker Hub（需配置 `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`）；正式 `v*.*.*` 发版仍走原有 `docker-publish.yml`
+- [chore] 移除冗余的 `ghcr-dockerhub.yml`（Docker Manual Publish）；手动补发改用 `docker-publish.yml` 的 `workflow_dispatch`
+- [改进] Docker 发布改为单次构建：`docker-publish-main` 本地 load 后 smoke 再 push，`docker-publish` 推送后对 amd64 镜像做 smoke，避免完整二次 `docker build`
+- [改进] Docker 镜像构建期临时安装 `gcc`，`pip install` 后立即 purge，减小最终镜像体积
+- [改进] Docker 发布工作流改为仅推送 Docker Hub，不再推送 GHCR
 - [新功能] Agent Chat 按会话持久化 Skill 选择，支持刷新和会话切换恢复，并区分省略 `skills`、显式空列表与非空选择；无持久化状态的历史会话继续使用运行时默认且不会被静默转为显式选择，复用分析 `context` 中残留的 legacy `skills` / `strategies` 也不会覆盖顶层三态或会话状态，非空但全部无效的 Skill 请求不会被当成显式空列表并清空既有选择
 - [改进] 后端 CI 在不跳过离线测试的前提下按完整测试文件分成三个独立 runner 并行执行，由单一 `backend-gate` 汇总门禁结果；实测文件耗时和首分片静态检查成本共同参与负载平衡，新测试文件自动纳入，现有 pip 安装和测试参数保持不变，避免 xdist 进程内并发的全局状态竞态。
 - [测试] 后端 CI 默认覆盖所有非 Web 改动，仅对已证明安全的纯 Web 路径跳过，并将整个 Web public 目录及前端渠道模板、设置帮助视为跨层运行合同；补充纯 Web、共享 Web 资产及 Web/非 Web 混合改动的过滤语义回归，明确 `predicate-quantifier: every` 按单文件匹配全部规则、再以任一匹配文件触发门禁。Docker CI 继续按构建输入过滤。离线测试保留稳定的串行执行与慢用例摘要，并移除重复用例和测试内真实等待。

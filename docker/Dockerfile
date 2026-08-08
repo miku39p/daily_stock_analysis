@@ -27,9 +27,9 @@ WORKDIR /app
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# 安装系统依赖（wkhtmltopdf 含 wkhtmltoimage，用于 Markdown 转图片 Issue #289）
+# 安装运行时系统依赖（wkhtmltopdf 含 wkhtmltoimage，用于 Markdown 转图片 Issue #289）
+# gcc 仅在 pip 安装阶段临时引入，装完即卸，避免留在最终镜像。
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
     curl \
     gosu \
     wkhtmltopdf \
@@ -46,8 +46,13 @@ RUN groupadd -g 1000 dsa && \
 # 复制依赖文件
 COPY requirements.txt .
 
-# 安装 Python 依赖
-RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
+# 安装 Python 依赖（构建期需要 gcc 的包编译完后立即 purge）
+RUN --mount=type=cache,target=/root/.cache/pip \
+    apt-get update && apt-get install -y --no-install-recommends gcc \
+    && pip install -r requirements.txt \
+    && apt-get purge -y gcc \
+    && apt-get autoremove -y --purge \
+    && rm -rf /var/lib/apt/lists/*
 
 # 复制应用代码
 COPY *.py ./

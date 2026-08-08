@@ -1,0 +1,134 @@
+name: Docker Publish Main
+
+# Push main → build image → push Docker Hub (continuous deploy).
+# Requires repository secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
+# Semver release images remain on docker-publish.yml (v*.*.* tags).
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'tests/**'
+      - '.claude/**'
+      - 'apps/dsa-desktop/**'
+  workflow_dispatch:
+
+concurrency:
+  group: docker-publish-main-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOCKERHUB_REGISTRY: docker.io
+  DOCKERHUB_IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
+  HAS_DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN != '' && 'true' || 'false' }}
+  HAS_DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME != '' && 'true' || 'false' }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Require Docker Hub secrets
+        run: |
+          set -euo pipefail
+          if [[ "${HAS_DOCKERHUB_USERNAME}" != "true" || "${HAS_DOCKERHUB_TOKEN}" != "true" ]]; then
+            echo "ERROR: Set repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN before using this workflow."
+            echo "GitHub → Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+
+      - name: Resolve image metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          SHORT_SHA="$(git rev-parse --short=12 HEAD)"
+          echo "revision=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "version=main-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKERHUB_REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata for Docker Hub
+        id: meta-dockerhub
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=main
+            type=sha,format=short
+          flavor: |
+            latest=false
+
+      # Single build: load locally for smoke, then push the same layers/tags.
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: |
+            stock-analysis:main
+            ${{ steps.meta-dockerhub.outputs.tags }}
+          labels: ${{ steps.meta-dockerhub.outputs.labels }}
+          build-args: |
+            DSA_WEB_VERSION=${{ steps.meta.outputs.version }}
+            DSA_WEB_REVISION=${{ steps.meta.outputs.revision }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Pre-publish docker smoke
+        run: |
+          docker run --rm stock-analysis:main python -c "
+          from src.config import get_config; print('ok-config')
+          from src.storage import DatabaseManager; print('ok-storage')
+          from src.notification import NotificationService; print('ok-notification')
+          from data_provider import DataFetcherManager; print('ok-data-provider')
+          from src.analyzer import GeminiAnalyzer; print('ok-analyzer')
+          import futu; print('ok-futu')
+          print('main-smoke-ok')
+          "
+
+      - name: Push images
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            tag="$(echo "$tag" | tr -d '[:space:]')"
+            [[ -z "$tag" ]] && continue
+            echo "Pushing ${tag}"
+            docker push "$tag"
+          done <<EOF
+          ${{ steps.meta-dockerhub.outputs.tags }}
+          EOF
+
+      - name: Publish summary
+        run: |
+          echo "### Docker main branch image published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Docker Hub: \`${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tags: \`latest\`, \`main\`, short SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Platforms: linux/amd64" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Pull commands" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo "docker pull ${{ env.DOCKERHUB_IMAGE_NAME }}:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "docker pull ${{ env.DOCKERHUB_IMAGE_NAME }}:main" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

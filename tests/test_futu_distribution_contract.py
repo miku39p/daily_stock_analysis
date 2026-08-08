@@ -33,7 +33,7 @@ def test_futu_sdk_is_pinned_and_verified_across_linux_distributions() -> None:
     ci = _workflow(".github/workflows/ci.yml")
     daily = _workflow(".github/workflows/00-daily-analysis.yml")
     docker_publish = _workflow(".github/workflows/docker-publish.yml")
-    manual_publish = _workflow(".github/workflows/ghcr-dockerhub.yml")
+    main_publish = _workflow(".github/workflows/docker-publish-main.yml")
 
     assert requirements.count("futu-api==10.8.6808") == 1
     assert (
@@ -44,7 +44,7 @@ def test_futu_sdk_is_pinned_and_verified_across_linux_distributions() -> None:
     assert "import futu" in _job_run_text(ci["jobs"]["docker-build"])
     assert "import futu" in _job_run_text(daily["jobs"]["analyze"])
     assert "import futu" in _job_run_text(docker_publish["jobs"]["build-and-push"])
-    assert "import futu" in _job_run_text(manual_publish["jobs"]["build-and-push"])
+    assert "import futu" in _job_run_text(main_publish["jobs"]["build-and-push"])
 
 
 def test_futu_sdk_is_collected_and_probed_in_desktop_backends() -> None:

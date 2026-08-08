@@ -331,17 +331,18 @@ OPENAI_MODEL=deepseek-v4-flash
 **结论**：对 Docker 用户来说，**最权威的版本不是某个 Python 源文件常量，而是你实际使用的镜像 tag**。
 
 **为什么**：
-1. 仓库的 Docker 发布由 `.github/workflows/docker-publish.yml` 触发，只有推送 `v*.*.*` 形式的 Git tag（例如 `v3.12.0`）时才会生成对应发布镜像。
-2. 这意味着 Docker 镜像版本本质上跟随 **GitHub Release / Git tag**，而不是写死在 `main.py`、`server.py` 或其他后端源码里。
-3. `apps/dsa-web/package.json` 里的 `version` 当前是占位值 `0.0.0`，WebUI “版本信息”卡片更适合用来确认静态资源是否已重建，不应当作 Docker 发布版本。
-4. 桌面端版本是单独维护的，写在 `apps/dsa-desktop/package.json` 的 `version` 字段；它只代表 Electron 桌面端，不代表 Docker 镜像版本。
+1. 正式发版镜像由 `.github/workflows/docker-publish.yml` 触发，推送 `v*.*.*` 形式的 annotated Git tag（例如 `v3.12.0`）时生成多架构镜像并推送到 Docker Hub。
+2. 另外可选 `.github/workflows/docker-publish-main.yml`：推送 `main`（或手动触发）时构建 `linux/amd64` 连续部署镜像（`latest` / `main` / short SHA）并推送到 Docker Hub，需配置 `DOCKERHUB_USERNAME` 与 `DOCKERHUB_TOKEN`。
+3. 这意味着正式 Docker 镜像版本本质上跟随 **GitHub Release / Git tag**；`main` 连续构建适合个人/fork 自动部署，不等同于正式发版。
+4. `apps/dsa-web/package.json` 里的 `version` 当前是占位值 `0.0.0`，WebUI “版本信息”卡片更适合用来确认静态资源是否已重建，不应当作 Docker 发布版本。
+5. 桌面端版本是单独维护的，写在 `apps/dsa-desktop/package.json` 的 `version` 字段；它只代表 Electron 桌面端，不代表 Docker 镜像版本。
 
 **怎么查当前 Docker 版本**：
-1. **先看部署命令或 Compose 文件里的镜像 tag**：例如 `ghcr.io/zhulinsen/daily_stock_analysis:v3.12.0`，其中 `v3.12.0` 就是当前部署版本。
-2. **如果你拉的是 `latest`**：请回看当时的 `docker pull` / `docker-compose.yml` / 部署脚本，或对照 [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) 确认对应发布记录。
+1. **先看部署命令或 Compose 文件里的镜像 tag**：例如 `zhulinsen/daily_stock_analysis:v3.12.0` 或 `<你的DockerHub用户名>/daily_stock_analysis:main`，其中 tag 就是当前部署版本。
+2. **如果你拉的是 `latest` / `main`**：可能是正式发版或 `main` 连续构建覆盖的结果，请对照 Actions 最近一次 **Docker Release Publish** / **Docker Publish Main** 运行记录。
 3. **如果只是想确认前端是否更新到新构建**：可以打开 WebUI 的“系统设置”页查看 `构建标识` / `构建时间`；这能帮助确认静态资源是否刷新，但不等同于 Docker 镜像发布版本。
 
-**建议**：如果你想避免重复更新，部署时尽量固定使用明确的版本 tag（如 `v3.12.0`），不要长期依赖 `latest`。
+**建议**：生产环境尽量固定使用明确的版本 tag（如 `v3.12.0`）；个人自动部署可用 `:main` 或 short SHA，并接受 `latest` 会被后续构建覆盖。
 
 ---
 

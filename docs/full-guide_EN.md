@@ -441,9 +441,8 @@ For the notification baseline, diagnostics, and deployment notes, see [Notificat
 
 The image uses prebuilt frontend assets under `/app/static` at runtime, so the running `server` container does not require the `apps/dsa-web` source tree or runtime `npm`. If WebUI cannot be opened after Docker deployment, first verify that `/app/static/index.html` exists inside the container.
 
-Official image registries:
+Current publish workflows push to Docker Hub:
 
-- GHCR: `ghcr.io/zhulinsen/daily_stock_analysis:<tag>`
 - Docker Hub: `<DOCKERHUB_USERNAME>/daily_stock_analysis:<tag>` (driven by the publisher's `DOCKERHUB_USERNAME` secret; the official release uses `zhulinsen/daily_stock_analysis`)
 
 ### Quick Start

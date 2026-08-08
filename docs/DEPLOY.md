@@ -69,6 +69,27 @@ docker-compose -f ./docker/docker-compose.yml ps
 
 如果只能使用 `512M`，请避免同时启动 `server` 和 `analyzer`，并关闭非必要的大盘复盘、新闻扩展和图片报告能力。
 
+### 3.2 推送 main 自动发布镜像（可选）
+
+仓库提供 `.github/workflows/docker-publish-main.yml`：向 `main` 推送代码（忽略纯文档 / 测试等无关路径）或手动运行 **Docker Publish Main** 时，会构建 `linux/amd64` 镜像并推送到 Docker Hub：
+
+- `<DOCKERHUB_USERNAME>/<repo>:latest` / `:main` / `:<short-sha>`
+
+使用前请在 GitHub 仓库 Settings → Secrets and variables → Actions 配置：
+
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`（Docker Hub Access Token）
+
+部署示例（把用户名换成你的 Docker Hub 账号）：
+
+```bash
+docker pull <DOCKERHUB_USERNAME>/daily_stock_analysis:latest
+# 或固定跟踪 main 分支构建
+docker pull <DOCKERHUB_USERNAME>/daily_stock_analysis:main
+```
+
+正式发版（`v*.*.*` annotated tag、多架构）仍使用 `.github/workflows/docker-publish.yml`（也支持在 Actions 里手动填 tag 补发）。
+
 ### 4. 常用管理命令
 
 ```bash
@@ -82,6 +103,9 @@ docker-compose -f ./docker/docker-compose.yml restart
 git pull
 docker-compose -f ./docker/docker-compose.yml build --no-cache
 docker-compose -f ./docker/docker-compose.yml up -d
+
+# 若改用自动发布的镜像（无需本机 build）
+# docker compose pull && docker compose up -d
 
 # 进入容器调试
 docker-compose -f ./docker/docker-compose.yml exec -u dsa stock-analyzer bash

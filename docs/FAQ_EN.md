@@ -306,17 +306,18 @@ Work through the following 5 checkpoints in order:
 **Short answer**: For Docker users, the authoritative version is **the image tag you actually deployed**, not a hardcoded constant in a Python source file.
 
 **Why**:
-1. Docker publishing is driven by `.github/workflows/docker-publish.yml`, which only publishes release images for Git tags matching `v*.*.*` (for example, `v3.12.0`).
-2. So the Docker image version follows the **GitHub Release / Git tag**, rather than a fixed value in `main.py`, `server.py`, or another backend module.
-3. The `version` field in `apps/dsa-web/package.json` is currently a placeholder `0.0.0`. The WebUI version/build card is useful for checking whether frontend assets were rebuilt, but it is not the Docker release version.
-4. The desktop app has its own version in `apps/dsa-desktop/package.json`, and that only applies to the Electron desktop build, not the Docker image.
+1. Formal release images are published by `.github/workflows/docker-publish.yml` when an annotated Git tag matching `v*.*.*` is pushed (for example, `v3.12.0`), producing multi-arch images on Docker Hub.
+2. Optionally, `.github/workflows/docker-publish-main.yml` builds a `linux/amd64` continuous-deploy image (`latest` / `main` / short SHA) on pushes to `main` (or manual dispatch) and pushes it to Docker Hub. It requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+3. So formal Docker image versions follow the **GitHub Release / Git tag**. Continuous `main` builds are for personal/fork auto-deploy and are not the same as a formal release.
+4. The `version` field in `apps/dsa-web/package.json` is currently a placeholder `0.0.0`. The WebUI version/build card is useful for checking whether frontend assets were rebuilt, but it is not the Docker release version.
+5. The desktop app has its own version in `apps/dsa-desktop/package.json`, and that only applies to the Electron desktop build, not the Docker image.
 
 **How to check your current Docker version**:
-1. **Check the image tag in your deploy command or Compose file**. For example, in `ghcr.io/zhulinsen/daily_stock_analysis:v3.12.0`, the deployed version is `v3.12.0`.
-2. **If you used `latest`**, check your original `docker pull`, `docker-compose.yml`, or deployment script, then compare with [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases).
+1. **Check the image tag in your deploy command or Compose file**. For example, in `zhulinsen/daily_stock_analysis:v3.12.0` or `<your-dockerhub-user>/daily_stock_analysis:main`, the tag is the deployed version.
+2. **If you used `latest` / `main`**, it may come from a formal release or a continuous `main` build; check the latest **Docker Release Publish** / **Docker Publish Main** Actions run.
 3. **If you only want to confirm the frontend was refreshed**, open WebUI → Settings and inspect `Build ID` / `Build Time`; that confirms static asset freshness, not the Docker release version.
 
-**Recommendation**: To avoid repeated updates, prefer a pinned version tag such as `v3.12.0` instead of relying on `latest`.
+**Recommendation**: Prefer a pinned version tag such as `v3.12.0` in production. For personal auto-deploy, use `:main` or a short SHA, and expect `latest` to be overwritten by later builds.
 
 ---
 
